@@ -149,23 +149,16 @@ MEDIA_ROOT = BASE_DIR / "media"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Email Notifications PROD
-EMAIL_BACKEND = ""
-EMAIL_HOST = ""
-EMAIL_PORT = 465
-EMAIL_HOST_USER = ""
-EMAIL_HOST_PASSWORD = ""
-EMAIL_USE_TLS = True
-
 # Email Notifications DEV (Mailpit)
-#EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-#EMAIL_HOST = 'localhost'  
-#EMAIL_PORT = 1025        
-#EMAIL_USE_TLS = False     
-#EMAIL_USE_SSL = False     
-#EMAIL_HOST_USER = ''      
-#EMAIL_HOST_PASSWORD = '' 
-#DEFAULT_FROM_EMAIL = 'Mentoris <noreply-mentoris@kontinua.org>'
+# TODO: Prod will need different config here!
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'localhost'  
+EMAIL_PORT = 1025        
+EMAIL_USE_TLS = False     
+EMAIL_USE_SSL = False     
+EMAIL_HOST_USER = ''      
+EMAIL_HOST_PASSWORD = '' 
+DEFAULT_FROM_EMAIL = 'Mentoris <noreply-mentoris@kontinua.org>'
 
 # Allows Iframes to display from pages hosted by this server
 X_FRAME_OPTIONS = "SAMEORIGIN"
