@@ -90,7 +90,7 @@ urlpatterns = [
     # But since login and register views were made custom, I am going to add as independent views
     # instead of using Django Auth views in its entirety.
     path('password_reset/', views.ResetPasswordView.as_view(), name='password_reset'),
-    path('password-reset-confirm/<uidb64>/<token>/',
+    path('password_reset_confirm/<uidb64>/<token>/',
          views.ResetPasswordConfirmView.as_view(),
          name='password_reset_confirm'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
