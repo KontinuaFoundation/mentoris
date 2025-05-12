@@ -1699,7 +1699,6 @@ def customLogout(request):
         logout(request)
     return render(request, "mentapp/login.html")
 
-
 # Auth Views
 #TODO: Use login and logout generic views instead of above request based views.
 class ResetPasswordView(SuccessMessageMixin, PasswordResetView):
