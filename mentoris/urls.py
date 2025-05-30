@@ -15,10 +15,12 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import path, include, re_path, reverse_lazy
 from . import views
 from django.conf.urls.static import static
+from django.contrib.auth.views import LogoutView
 from django.conf import settings
+from django.contrib.auth import views as auth_views
 
 
 urlpatterns = [
@@ -26,7 +28,14 @@ urlpatterns = [
     re_path(r".*/footer.html/", views.footer, name="footer"),
     path("", views.default, name="default"),
     path("admin/", admin.site.urls),
+    path("fetch_attachments/question/<int:question_id>/", views.fetch_attachments_question, name="fetch_attachments_question"),
+    path("fetch_attachments/support/<int:support_id>/", views.fetch_attachments_support, name="fetch_attachment_support"),
+    path("fetch_attachments_inputs/support/<int:support_id>/", views.fetch_attachments_inputs_support, name="fetch_attachments_inputs_support"),
+    path("fetch_attachments_inputs/question/<int:question_id>/<str:part>/", views.fetch_attachments_inputs_question, name="fetch_attachments_inputs_question"),
+    path("latex_window/question/<int:question_id>/<str:part>/<int:width>/", views.latex_window_question, name = "latex_window_question"),
+    path("latex_window/support/<int:support_id>/<int:width>/", views.latex_window_support, name="latex_window_support"),
     path("login/", views.customLogin, name="login"),
+    path('logoutCustom/', views.customLogout, name='logoutCustom'),
     path("signUp/", views.sign_up, name="sign_up"),
     path("verify_email/", views.verify_email, name="verify_email"),
     path(
@@ -37,9 +46,6 @@ urlpatterns = [
     path("profile/", views.profile, name="profile"),
     path("profile/<uuid:user_id>/", views.user_info, name="user_info"),
     path("profile/edit/<uuid:user_id>/", views.user_edit, name="user_edit"),
-    path("reset/", views.reset, name="reset"),
-    path("reset_password/", views.reset_password, name="reset_password"),
-    path("reset_password/<uidb64>/<token>/", views.verify_reset, name="verify_reset"),
     path("user_directory/", views.user_directory, name="user_directory"),
     path("promotion/", views.promotion, name="promotion"),
     path("main/", views.main, name="main"),
@@ -78,4 +84,13 @@ urlpatterns = [
     path("create_question/", views.create_question, name="create_question"),
     path("edit_question/<int:question_id>/", views.edit_question, name="edit_question"),
     path("question_approval/", views.question_approval, name="question_approval"),
+    path("handles/", views.handles, name="handles"),
+    path('delete-handle/<str:handle>/<int:site_id>/<uuid:user_id>', views.delete_handle, name='delete_handle'),
+    #TODO: Look into Django Auth views https://docs.djangoproject.com/en/5.1/topics/auth/default/
+    # But since login and register views were made custom, I am going to add as independent views
+    # instead of using Django Auth views in its entirety.
+    path('password_reset/', views.ResetPasswordView.as_view(), name='password_reset'),
+    path('password_reset_confirm/<uidb64>/<token>/',
+         views.ResetPasswordConfirmView.as_view(),
+         name='password_reset_confirm'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

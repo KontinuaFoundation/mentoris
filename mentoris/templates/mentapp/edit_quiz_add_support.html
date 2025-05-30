@@ -12,12 +12,8 @@
     {% load static %}
     <link rel="stylesheet" href="{% static '/css/colors.css'%}">
     <link rel="stylesheet" href="{% static '/css/quiz_styles.css'%}">
-    <script src= "{% static '/scripts/generate_quiz_html.js' %}"></script>
+    <script src= "{% static "/scripts/generate_quiz_html.js" %}"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/latex.js/dist/latex.js"></script>
-    <script>
-        customElements.define("latex-js", latexjs.LaTeXJSComponent);
-    </script>
 
     <style>
         .filter_label {
@@ -97,12 +93,7 @@
         <button id="save_changes_button">Save Additions</button>
         <button id="filter_button">Search</button>
         <br>
-        <form action="{% url 'create_support' quiz_id=quiz_id%}" method="post">
-            {% csrf_token %}
-            <button style="width: 200px;" type="submit">
-                Create New Support
-            </button>
-        </form>
+        <button id="create_support" style="width: 200px;" onclick="location.href='/create_support/'">Create New Support</button>
         <div id="save_status" class="bordered"></div>
     </div>
 
@@ -175,7 +166,6 @@
                             creator: creator_value,
                             title: title
                         }
-                        
                     });
                 
                 request.done(function (data) {
@@ -245,21 +235,11 @@
                             }
                         });
 
+
                         $(add_button).addClass("add_support_button");
                         $(add_button).addClass("add_support_add_state");
                         $(add_button).addClass("bold_font");
-                        $(edit_button).addClass("edit_question");
-
-                        let ul = document.createElement("ul");
-                        ul.className = "unbulleted_list";
-                        let add_button_li = document.createElement("li");
-                        let edit_button_li = document.createElement("li");
-                        add_button_li.appendChild(add_button);
-                        edit_button_li.appendChild(edit_button);
-                        ul.appendChild(add_button_li);
-                        ul.appendChild(edit_button_li);
-                        button_wrapper.appendChild(ul);
-                        
+                        button_wrapper.appendChild(add_button);
                         border_wrapper.appendChild(button_wrapper);
                         
                         let latex_wrapper = document.createElement("iframe");
@@ -276,6 +256,7 @@
                             },
                             false,
                           );
+
                     }
                 });
 
@@ -352,3 +333,4 @@
 
 
 </html>
+

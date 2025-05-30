@@ -3,11 +3,13 @@ import json, os, random
 from datetime import date
 from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.contrib import messages
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage
+from django.core.exceptions import ValidationError
+from django.urls import resolve, reverse, reverse_lazy
 from django.core.mail import EmailMessage
 from django.shortcuts import render, get_object_or_404, redirect
 from django.template import loader
@@ -15,6 +17,8 @@ from django.template.loader import render_to_string
 from django.urls import resolve
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.contrib.auth.views import PasswordResetView, PasswordResetConfirmView
+from django.contrib.messages.views import SuccessMessageMixin
 from functools import wraps
 from mentapp.models import (
     Handle,
@@ -38,7 +42,9 @@ from mentapp.models import (
     Support,
     Support_Loc,
     Support_Attachment,
+    Site,
     Quiz_Support,
+    Handle,
 )
 from mentoris.email_verification_token_generator import email_verification_token
 from mentoris.forms import UserForm, LatexForm, QuizForm
@@ -59,7 +65,7 @@ def mentor_req(view_func):
             or request.user.is_verified
         ):
             return HttpResponseForbidden(
-                "Forbidden: Must be mentor or quizmaker to access add questions page."
+                "Forbidden: Must be mentor or quizmaker to access add questions page. Use request verification for mentor status"
             )
         return view_func(request, *args, **kwargs)
 
@@ -75,7 +81,7 @@ def quizmaker_req(view_func):
         # Checking user is quiz maker or higher else returning forbidden HTTP page.
         if not (request.user.is_quizmaker or request.user.is_admin):
             return HttpResponseForbidden(
-                "Forbidden: Must be quizmaker or admin to access edit quiz."
+                "Forbidden: Must be quizmaker or admin to access edit quiz. Must request verification"
             )
         return view_func(request, *args, **kwargs)
 
@@ -90,16 +96,14 @@ def admin_req(view_func):
             return redirect("admin:login")
         # Must be admin!
         if not request.user.is_admin:
-            return HttpResponseForbidden(
-                "Forbidden: Must be admin to access edit quiz."
-            )
+            return HttpResponseForbidden("Forbidden: Must be admin to access.")
         return view_func(request, *args, **kwargs)
 
     return _wrapped_view
 
 
 @mentor_req
-def latex(request):
+def latex(request, question_id):
     volumes = (
         Volume.objects.values_list("volume_id", flat=True)
         .distinct()
@@ -141,6 +145,7 @@ def latex(request):
         if request.POST.get("command") == "question":
             question =  get_object_or_404(Question, question_id = question_id)
             question_loc = get_object_or_404(Question_Loc, question = question, lang_code = "ENG", dialect_code = "US")
+
             question_loc.question_latex = request.POST.get("input")
             question_loc.save()
             return JsonResponse({"success": True})
@@ -155,6 +160,7 @@ def latex(request):
                 blob.save()
                 attachment.save()
             
+
             return JsonResponse({"success": True, "url": blob.file.url, "name": name})
         form = LatexForm(request.POST)
         question = request.POST.get("latex_question")
@@ -172,8 +178,7 @@ def latex(request):
             question_object = Question()
             question_loc = Question_Loc()
 
-            question_object.creator = request.user
-            question_loc.creator = request.user
+            # TODO: question_object.creator = CURRENT USER
 
             chapter_object = request.POST.get("chapter")
             chapter_string = chapter_object.split("_")
@@ -355,70 +360,22 @@ def sign_up(request):
     else:
         return render(request, "mentapp/sign_up.html")
 
-
+@login_required
 def profile(request):
     template = loader.get_template("mentapp/profile.html")
     return HttpResponse(template.render())
-
-
-def reset(request):
-    if request.method == "POST":
-        email_address = request.POST.get("email")
-        user = User.objects.get(email=email_address)
-        current_site = get_current_site(request)
-        subject = "Reset your password"
-        message = render_to_string(
-            "mentapp/reset_password_message.html",
-            {
-                "request": request,
-                "user": user,
-                "domain": current_site.domain,
-                "uid": urlsafe_base64_encode(force_bytes(user.pk)),
-                "token": email_verification_token.make_token(user),
-            },
-        )
-        email = EmailMessage(
-            subject, message, "notifications@kontinua.org", [email_address]
-        )
-        email.content_subtype = "html"
-        email.send()
-        return JsonResponse({"success": True})
-    return render(request, "mentapp/reset.html")
-
-
-def verify_reset(request, uidb64, token):
-    try:
-        uid = force_str(urlsafe_base64_decode(uidb64))
-        user = User.objects.get(pk=uid)
-    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-        user = None
-    if user and email_verification_token.check_token(user, token):
-        return redirect(f"/reset_password")
-    else:
-        messages.warning(request, "The link is invalid.")
-    return render(request, "mentapp/verify_email_confirm.html")
-
-
-def reset_password(request):
-    if request.method == "POST":
-        email = request.POST.get("email")
-        user = User.objects.get(email=email)
-        new_password = request.POST.get("new_password")
-        user.set_password(new_password)
-        user.save()
-        return JsonResponse({"success": True})
-    else:
-        return render(request, "mentapp/reset_password.html")
-
 
 def customLogin(request):
     if request.method == "POST":
         email = request.POST.get("email")
         password = request.POST.get("password")
         user = authenticate(request, username=email, password=password)
-        if user is not None:
+        if user is not None and user.is_verified:
             login(request, user)
-            return redirect(f"../profile/{user.user_id}")
+            return redirect("main")
+        elif user is not None and not user.is_verified:
+            login(request, user)
+            return redirect(f"/profile/{user.user_id}")
         else:
             messages.error(
                 request,
@@ -818,7 +775,7 @@ def user_info(request, user_id):
         return render(request, "mentapp/login.html")
     user_profile = get_object_or_404(User, user_id=user_id)
     if user_profile.is_admin == True:
-        return HttpResponseForbidden("Forbidden: Admin's use admin portal")
+        return redirect("/admin/")
 
     try:
         email = Email.objects.get(user=user_profile, is_primary=True)
@@ -982,6 +939,7 @@ def edit_quiz(request, quiz_id):
             print(quiz_instance)
             latex_to_pdf(question_list, [], quiz_instance)
             print("return")
+
             return JsonResponse({"success": True})
     else:
         if request.GET.get("command") == "fetch_quiz_questions":
@@ -1032,7 +990,9 @@ def edit_quiz_add_question(request, quiz_id):
         point_filter = request.GET.get("point")
         time_filter = request.GET.get("time")
         difficulty_filter = request.GET.get("difficulty")
-        question_instances = Question.objects.all().filter(approved=True)
+        question_instances = Question.objects.all()
+        # TODO fix question approval
+        # question_instances = Question.objects.all().filter(approved=True)
 
         if volume_filter:
             question_instances = question_instances.filter(
@@ -1186,7 +1146,14 @@ def user_edit(request, user_id):
 
     for key, value in request.POST.items():
         if key == "primary_email":
-            Email.objects.filter(user=user, is_primary=True).update(email_address=value)
+            Email.objects.filter(user=user, is_primary=True).delete()
+
+            emailObject = Email()
+            emailObject.email_address = value
+            emailObject.user = user
+            emailObject.is_primary = True
+            emailObject.is_verified = True
+            emailObject.save()
         if key == "other_emails":
             Email.objects.filter(user=user, is_primary=False).delete()
             insEmails = value.split(",")
@@ -1295,7 +1262,6 @@ def download_pdf(request, quiz_id):
         try:
             latex_to_pdf(question_list, support_list, quiz_instance)
         except:
-            print("Failed to save pdf")
             raise SystemError
         return download_pdf(request, quiz_id)
     blob_instance = quiz_rendering_instance.blob_key
@@ -1357,6 +1323,50 @@ def delete_quiz(request, quiz_id):
     return redirect(request.META.get("HTTP_REFERER", "/"))
 
 
+def latex_window_support(request, support_id, width):
+    return render(
+        request,
+        "mentapp/latex_window.html",
+        {"type": "support", "support_id": support_id, "width": width},
+    )
+
+
+def grab_attachments_support(support_id):
+    support = get_object_or_404(Support, support_id=support_id)
+    support_loc = get_object_or_404(
+        Support_Loc, support=support, lang_code="ENG", dialect_code="US"
+    )
+    attachments = Support_Attachment.objects.filter(
+        support=support_loc, lang_code="ENG", dialect_code="US"
+    )
+    attachmentsList = list()
+
+    for attachment in attachments:
+        attachmentDict = dict()
+        attachmentDict["filename"] = attachment.filename
+        attachmentDict["url"] = attachment.blob_key.file.url
+        attachmentsList.append(attachmentDict)
+
+    return attachmentsList
+
+
+# Returns a JSON response with only the attachment files and names
+def fetch_attachments_support(request, support_id):
+    attachmentsList = grab_attachments_support(support_id)
+    return JsonResponse({"attachments": attachmentsList})
+
+
+# Returns a JSON response with the attachment files and names and the LaTeX
+def fetch_attachments_inputs_support(request, support_id):
+    support = get_object_or_404(Support, support_id=support_id)
+    support_Loc = get_object_or_404(
+        Support_Loc, support=support, lang_code="ENG", dialect_code="US"
+    )
+    input = support_Loc.content_latex
+    attachmentsList = grab_attachments_support(support_id)
+    return JsonResponse({"attachments": attachmentsList, "input": input})
+
+
 def create_support(request, quiz_id):
 
     if request.method == "POST":
@@ -1410,6 +1420,7 @@ def edit_support(request, quiz_id, support_id):
             support_loc.creator=(request.user)
             support_loc.approver=creators.first()
             
+
 
             support_loc.save()
 
@@ -1551,6 +1562,7 @@ def latex_window_support(request, support_id, width):
             "support_id": support_id,
             "width": width
         }
+
     )
 
 def edit_question(request, question_id):
@@ -1593,9 +1605,30 @@ def edit_question(request, question_id):
         volume_id = request.POST.get("volume")
         chapters = Chapter.objects.filter(volume__volume_id=volume_id).distinct()
 
-        chapter_locs = Chapter_Loc.objects.filter(
-            chapter__chapter_id__in=chapters
-        ).distinct()
+
+        if request.POST.get("command") == "deleteAttachment":
+            attachment = get_object_or_404(
+                Question_Attachment,
+                question=question_loc,
+                filename=request.POST.get("filename"),
+            )
+            attachment.blob_key.delete()
+            attachment.delete()
+            return JsonResponse({"success": True})
+        if request.POST.get("command") == "answer":
+            question_loc.answer_latex = request.POST.get("input")
+            question_loc.save()
+            return JsonResponse({"success": True})
+
+        if request.POST.get("command") == "rubric":
+            question_loc.rubric_latex = request.POST.get("input")
+            question_loc.save()
+            return JsonResponse({"success": True})
+
+        if request.POST.get("command") == "question":
+            question_loc.question_latex = request.POST.get("input")
+            question_loc.save()
+            return JsonResponse({"success": True})
 
 
         if request.method == "POST":
