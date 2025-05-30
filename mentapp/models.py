@@ -327,7 +327,7 @@ class Support_Loc(models.Model):
     lang_code = models.CharField(max_length=5, default="ENG")
     dialect_code = models.CharField(max_length=5, default="US")
     title = models.CharField(max_length=100, null=True)
-    content_latex = models.CharField(max_length=500, null=True)
+    content_latex = models.TextField(default="")
     date_created = models.DateTimeField(default=now)
     date_approved = models.DateTimeField(default=now)
     creator = models.ForeignKey(

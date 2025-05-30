@@ -177,8 +177,11 @@
                     * TODO extract this code into a .js file, a lot of this will be needed on the edit support page
                     */
                     for (const i in data) {
+                        console.log("thi i the t");
+                        console.log(data);
                         var list_item = document.createElement("li");
                         list_item.id = data[i]["support_id"];
+                        console.log(data[i]["support_id"]);
 
                         var border_wrapper = document.createElement("div");
                         $(border_wrapper).addClass("bordered");
@@ -201,6 +204,38 @@
                             toggle_add(event.target);
                         });
 
+                        var edit_button = document.createElement("button");
+                        edit_button.innerHTML = "Edit";
+                        edit_button.addEventListener('click', function (event) {
+                            let supports_list = document.getElementById("supports_list");
+                            let list = supports_list.children;
+                            let index = -1;
+
+                            for (let i = 0; i < list.length; ++i) {
+                                if (list[i].contains(event.target)) {
+                                    index = i;
+                                    break; // Once found, exit the loop
+                                }
+                            }
+
+                            if (index !== -1) {
+                                let support_id = list[index].querySelector('.bordered iframe')
+                                    .src.split("/")[5];
+
+                                if (support_id) {
+                                    var pathname = window.location.pathname;
+                                    var segments = pathname.split('/');
+                                    var quiz_id = segments[segments.length - 1];
+                                    window.location.href = "/edit_support/" + quiz_id + "/"+support_id;
+                                } else {
+                                    console.error('Support ID not found');
+                                }
+                            } else {
+                                console.error('Element not found in list');
+                            }
+                        });
+
+
                         $(add_button).addClass("add_support_button");
                         $(add_button).addClass("add_support_add_state");
                         $(add_button).addClass("bold_font");
@@ -220,7 +255,8 @@
                                 border_wrapper.style.height= (200 + latex_wrapper.contentDocument.body.scrollHeight) + "px";
                             },
                             false,
-                        );
+                          );
+
                     }
                 });
 
@@ -294,4 +330,7 @@
     </script>
 
 </body>
+
+
 </html>
+

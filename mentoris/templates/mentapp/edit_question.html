@@ -19,7 +19,15 @@
     {% load static %}
     <link rel="stylesheet" href="{% static '/css/colors.css'%}">
     <link rel="stylesheet" href="{% static '/css/quiz_styles.css'%}">
-    <script src= "{% static "/scripts/generate_quiz_html.js" %}"></script>
+    <script src="{% static " /scripts/generate_quiz_html.js" %}"></script>
+
+    <base href="../../dist/" />
+
+    <script src="https://cdn.jsdelivr.net/npm/latex.js/dist/latex.js"></script>
+    <script>
+        customElements.define("latex-js", latexjs.LaTeXJSComponent);
+    </script>
+
 
     <style>
         /* Define a custom class for your textarea */
@@ -42,7 +50,7 @@
 
         textarea {
             font-size: .8em;
-            padding: 10px;
+
         }
 
         .content {
@@ -74,6 +82,7 @@
             grid-row: 2 / span 4;
             height: 100%;
         }
+
         #big-preview {
             height: 100%;
             width: 100%;
@@ -82,209 +91,213 @@
 
     </style>
 
-    <title>Edit Question</title>
+    <title>LaTeX.js Test</title>
 </head>
 
 <body>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
-        <iframe src="header.html" width="100%" height="95px" frameBorder="0"
-            style="display: block; padding: 0px; margin: 0px;"></iframe>
-        <button id="back_button" onclick="confirmLeave()" type="button">Back</button>
+    <iframe src="header.html" width="100%" height="95px" frameBorder="0"
+        style="display: block; padding: 0px; margin: 0px;"></iframe>
+    <button id="back_button" onclick="confirmLeave()" type="button">Back</button>
 
-            <form method="POST" action= "{% url 'edit_question' question_id %}" enctype="multipart/form-data">
-                {% csrf_token %}
+    <form method="POST" action="{% url 'edit_question' question_id %}" enctype="multipart/form-data">
+        {% csrf_token %}
 
-                <!--Grid for latex-->
-                <div class="grid">
-                    <!--Input Row Start (Question, Answer, Rubric)-->
+        <!--Grid for latex-->
+        <div class="grid">
+            <!--Input Row Start (Question, Answer, Rubric)-->
 
-                    <!--Question Input-->
-                    <p  style="grid-row:1; grid-col:1;"> Question LaTeX: </p>
-                    <div style="grid-row:2; grid-col:1;">
-                        <textarea id="question-input" class="latex-input-field" rows="12" name="latex_question">{{ question }}</textarea>
-                    </div>
+            <!--Question Input-->
+            <p style="grid-row:1; grid-col:1;"> Question LaTeX: </p>
+            <div style="grid-row:2; grid-col:1;">
+                <textarea id="question-input" class="latex-input-field" rows="12"
+                    name="latex_question">{{ question }}</textarea>
+            </div>
 
-                    <!--Answer Input-->
-                    <p  style="grid-row:1; grid-col:2;">Answer LaTeX:</p>
-                    <div style="grid-row:2; grid-col:2;">
-                        <textarea id="answer-input" class="latex-input-field" rows="12" name="latex_answer">{{answer}}</textarea>
-                    </div>
+            <!--Answer Input-->
+            <p style="grid-row:1; grid-col:2;">Answer LaTeX:</p>
+            <div style="grid-row:2; grid-col:2;">
+                <textarea id="answer-input" class="latex-input-field" rows="12"
+                    name="latex_answer">{{answer}}</textarea>
+            </div>
 
-                    <!--Grading (Rubric) Input-->
-                    <p style="grid-row:1; grid-col:3;">Rubric LaTeX:</p>
-                    <div style="grid-row:2; grid-col:3;">
-                        <textarea id="grading-input" class="latex-input-field" rows="12" name="latex_grading">{{grading}}</textarea>
-                    </div>
+            <!--Grading (Rubric) Input-->
+            <p style="grid-row:1; grid-col:3;">Rubric LaTeX:</p>
+            <div style="grid-row:2; grid-col:3;">
+                <textarea id="grading-input" class="latex-input-field" rows="12"
+                    name="latex_grading">{{grading}}</textarea>
+            </div>
 
-                    <!--Output (Render) Row Start (Question, Answer, Rubric)-->
+            <!--Output (Render) Row Start (Question, Answer, Rubric)-->
 
-                    <!--Question Output-->
-                    <p style="grid-row:3; grid-col:1;">Question Render:</p>
-                    <div style="grid-row:4; grid-col:1;" class="flex-v">
-                        <div id="question-output" class="latex-js-custom">
+            <!--Question Output-->
+            <p style="grid-row:3; grid-col:1;">Question Render:</p>
+            <div style="grid-row:4; grid-col:1;" class="flex-v">
+                <div id="question-output" class="latex-js-custom">
 
-                        </div>
-
-                        <button type="button" class="btn btn-primary" id="question-button"
-                            style="height: 75px; width: 100%" name="question-button">
-                            Render
-                        </button>
-                    </div>
-
-                    <!--Answer Output-->
-                    <p style="grid-row:3; grid-col:2;">Answer Render:</p>
-                    <div style="grid-row:4; grid-col:2;"class="flex-v">
-                        <div id="answer-output" class="latex-js-custom">
-
-                        </div>
-                        <button type="button" class="btn btn-primary" id="answer-button"
-                            style="height: 75px; width: 100%" name="answer-button">
-                            Render
-                        </button>
-                    </div>
-                    
-                    <!--Grading (Rubric) Output-->
-                    <p style="grid-row:3; grid-col:3;">Rubric Render:</p>
-                    <div style="grid-row:4; grid-col:3;"class="flex-v">
-                        <div id="grading-output" class="latex-js-custom">
-
-                        </div>
-                        <button type="button" class="btn btn-primary" id="grading-button"
-                            style="height: 75px; width: 100%" name="grading-button">
-                            Render
-                        </button>
-                    </div>
-
-                    <!--Large Preview-->
-                    <p style="grid-row:1; grid-col:5;">Large Preview:</p>
-                    <div id="grid-big-preview" class= "latex-js-custom">
-                        <iframe id="big-preview" style="height: 98%;"></iframe> 
-                    </div>
-                <!--End Grid-->
-                </div>
-            <div class="content">
-                <div class="container" style="margin-top: 50px"></div>
-                <div class="form-group" style="margin-bottom: 10px">
-                    <label style="margin-bottom: 5px;" class="btn btn-primary" for="attachments">Add
-                        Attachment(s)</label>
-                    <input style="display: none; " class="form-control" name="attachments" type="file" id="attachments"
-                        accept=".png, .jpg" multiple />
-                    <br>
                 </div>
 
-                <div id="selectedFiles"></div>
+                <button type="button" class="btn btn-primary" id="question-button" style="height: 75px; width: 100%"
+                    name="question-button">
+                    Render
+                </button>
+            </div>
 
-                <div style="display: flex;">
-                    <div style="border: 1px solid black" class="col-9 d-flex align-items-center">
-                        <div class="container">
-                            <div class="text-center">
-                                <h4>Question Information</h4>
+            <!--Answer Output-->
+            <p style="grid-row:3; grid-col:2;">Answer Render:</p>
+            <div style="grid-row:4; grid-col:2;" class="flex-v">
+                <div id="answer-output" class="latex-js-custom">
+
+                </div>
+                <button type="button" class="btn btn-primary" id="answer-button" style="height: 75px; width: 100%"
+                    name="answer-button">
+                    Render
+                </button>
+            </div>
+
+            <!--Grading (Rubric) Output-->
+            <p style="grid-row:3; grid-col:3;">Rubric Render:</p>
+            <div style="grid-row:4; grid-col:3;" class="flex-v">
+                <div id="grading-output" class="latex-js-custom">
+
+
+                </div>
+                <button type="button" class="btn btn-primary" id="grading-button" style="height: 75px; width: 100%"
+                    name="grading-button">
+                    Render
+                </button>
+            </div>
+
+            <!--Large Preview-->
+            <p style="grid-row:1; grid-col:5;">Large Preview:</p>
+            <div id="grid-big-preview" class="latex-js-custom">
+                <iframe id="big-preview" style="height: 98%;"></iframe>
+            </div>
+            <!--End Grid-->
+        </div>
+        <div class="content">
+            <div class="container" style="margin-top: 50px"></div>
+            <div class="form-group" style="margin-bottom: 10px">
+                <label style="margin-bottom: 5px;" class="btn btn-primary" for="attachments">Add
+                    Attachment(s)</label>
+                <input style="display: none; " class="form-control" name="attachments" type="file" id="attachments"
+                    accept=".png, .jpg" multiple />
+                <br>
+            </div>
+
+            <div id="selectedFiles"></div>
+
+            <div style="display: flex;">
+                <div style="border: 1px solid black" class="col-9 d-flex align-items-center">
+                    <div class="container">
+                        <div class="text-center">
+                            <h4>Question Information</h4>
+                        </div>
+                        <div class="container" style="margin-top: 20px"></div>
+                        <div class="row">
+                            <div class="col">
+                                <label for="time-required" class="control-label">Time Required</label>
+
                             </div>
-                            <div class="container" style="margin-top: 20px"></div>
-                            <div class="row">
-                                <div class="col">
-                                    <label for="time-required" class="control-label">Time Required</label>
+                            <div class="col">
+                                <div class="form-group required">
+                                    <input type="number" class="form-control" id="time-required" name="time_required"
+                                        value="{{ form.time_required.value }}" required />
                                 </div>
-                                <div class="col">
-                                    <div class="form-group required">
-                                        <input type="number" class="form-control" id="time-required"
-                                            name="time_required" value="{{ form.time_required.value }}" required />
-                                    </div>
+                            </div>
+                            <div class="col">
+                                <label for="volume" class="control-label">Volume</label>
+                            </div>
+                            <div class="col">
+                                <div class="form-group required">
+                                    <select class="form-select" id="volume" name="volume">
+                                        {% for v in volumes %}
+                                        {% if v == volume_id %}
+                                        <option value="{{ v }}" selected>
+                                            {{ v }}
+                                        </option>
+                                        {% else %}
+                                        <option value="{{ v }}">
+                                            {{ v }}
+                                        </option>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </select>
                                 </div>
-                                <div class="col">
-                                    <label for="volume" class="control-label">Volume</label>
+                            </div>
+                            <div class="col">
+                                <label for="chapter" class="control-label">Chapter</label>
+                            </div>
+                            <div class="col">
+                                <div class="form-group required">
+                                    <select class="form-select" id="chapter" name="chapter">
+                                        {% for c in chapters %}
+                                        {% if c == chapter %}
+                                        <option value="{{ c }}" selected>
+                                            {{ c }}
+                                        </option>
+                                        {% else %}
+                                        <option value="{{ c }}">
+                                            {{ c }}
+                                        </option>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </select>
                                 </div>
-                                <div class="col">
-                                    <div class="form-group required">
-                                        <select class="form-select" id="volume" name="volume">
-                                            {% for v in volumes %}
-                                            {% if v == volume_id %}
-                                            <option value="{{ v }}" selected>
-                                                {{ v }}
-                                            </option>
-                                            {% else %}
-                                            <option value="{{ v }}">
-                                                {{ v }}
-                                            </option>
-                                            {% endif %}
-                                            {% endfor %}
-                                        </select>
-                                    </div>
+                            </div>
+                            <div class="col">
+                                <label for="time-required" class="control-label">Difficulty</label>
+                            </div>
+                            <div class="col">
+                                <div class="form-group required">
+                                    <input type="number" class="form-control" id="difficulty" name="difficulty"
+                                        value="{{ form.difficulty.value }}" required />
                                 </div>
-                                <div class="col">
-                                    <label for="chapter" class="control-label">Chapter</label>
+                            </div>
+                            <div class="col">
+                                <label for="points" class="control-label">Points</label>
+                            </div>
+                            <div class="col">
+                                <div class="form-group required">
+                                    <input type="number" class="form-control" id="points" name="points"
+                                        value="{{ form.points.value }}" required />
                                 </div>
-                                <div class="col">
-                                    <div class="form-group required">
-                                        <select class="form-select" id="chapter" name="chapter">
-                                            {% for c in chapters %}
-                                            {% if c == chapter %}
-                                            <option value="{{ c }}" selected>
-                                                {{ c }}
-                                            </option>
-                                            {% else %}
-                                            <option value="{{ c }}">
-                                                {{ c }}
-                                            </option>
-                                            {% endif %}
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="col">
-                                    <label for="time-required" class="control-label">Difficulty</label>
-                                </div>
-                                <div class="col">
-                                    <div class="form-group required">
-                                        <input type="number" class="form-control" id="difficulty" name="difficulty"
-                                            value="{{ form.difficulty.value }}" required />
-                                    </div>
-                                </div>
-                                <div class="col">
-                                    <label for="points" class="control-label">Points</label>
-                                </div>
-                                <div class="col">
-                                    <div class="form-group required">
-                                        <input type="number" class="form-control" id="points" name="points"
-                                            value="{{ form.points.value }}" required />
-                                    </div>
-                                </div>
-                                <div class="col">
-                                    <label for="pages-required" class="control-label">Pages Required</label>
-                                </div>
-                                <div class="col">
-                                    <div class="form-group required">
-                                        <input type="number" class="form-control" id="pages-required"
-                                            name="pages_required" value="{{ form.pages_required.value }}" step="0.1"
-                                            required />
-                                    </div>
+                            </div>
+                            <div class="col">
+                                <label for="pages-required" class="control-label">Pages Required</label>
+                            </div>
+                            <div class="col">
+                                <div class="form-group required">
+                                    <input type="number" class="form-control" id="pages-required" name="pages_required"
+                                        value="{{ form.pages_required.value }}" step="0.1" required />
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="col-2 d-flex align-items-center justify-content-center">
-                        <button type="submit" name="submit-question" class="btn btn-primary" style="
+                </div>
+                <div class="col-2 d-flex align-items-center justify-content-center">
+                    <button type="submit" name="submit-question" class="btn btn-primary" style="
                         height: 100%;
                         width: 100%;
                         font-size: x-large;
                     ">
                         Save Changes
-                        </button>
-                    </div>
+                    </button>
                 </div>
-                <div class="container" style="margin-top: 30px"></div>
-                <button type="submit" hidden id="volume-button" name="volume-button"></button>
-            </form>
-
-        <div id="customModal" class="modal">
-            <div class="modal-content">
-                <p>Are you sure you want to leave this page?</p>
-                <button class="modalButton" onclick="leaveWithoutSaving()">Leave Without Saving</button>
-                <button class="modalButton" onclick="cancelLeave()">Cancel</button>
             </div>
-        </div>
+            <div class="container" style="margin-top: 30px"></div>
+            <button type="submit" hidden id="volume-button" name="volume-button"></button>
+    </form>
 
-        <iframe src="footer.html" width="100%" frameborder="0"></iframe>
+    <div id="customModal" class="modal">
+        <div class="modal-content">
+            <p>Are you sure you want to leave this page?</p>
+            <button class="modalButton" onclick="leaveWithoutSaving()">Leave Without Saving</button>
+            <button class="modalButton" onclick="cancelLeave()">Cancel</button>
+        </div>
+    </div>
+
+    <iframe src="footer.html" width="100%" frameborder="0"></iframe>
     </div>
     <script>
 
@@ -294,7 +307,8 @@
         * @param {string[]} urls The list of urls to the images of the attaachments.
         * @param {string[]} filenames The list of names of the attachments.
         */
-        function displayAttachments(filenames, urls){
+        function displayAttachments(filenames, urls) {
+
             let selectedFilesDiv = document.getElementById("selectedFiles")
             for (let i = 0; i < filenames.length; ++i) {
                 let filename = filenames[i];
@@ -303,7 +317,7 @@
                 const fileDiv = document.createElement('div');
                 fileDiv.style.width = "40em";
                 fileDiv.classList.add('bordered');
-                
+
                 const icon = document.createElement('img');
                 icon.src = url;
                 icon.height = '100';
@@ -322,11 +336,12 @@
                 deleteButton.textContent = 'Delete';
                 deleteButton.style.float = 'right';
                 deleteButton.type = 'button';
-                deleteButton.addEventListener('click', function(event){
-                
+                deleteButton.addEventListener('click', function (event) {
+
                     let request = $.ajax({
                         type: "POST",
-                        headers:{'X-CSRFToken': "{{csrf_token}}"},
+                        headers: { 'X-CSRFToken': "{{csrf_token}}" },
+
                         url: "/edit_question/{{question_id}}/",
                         dataType: 'json',
                         data: {
@@ -335,7 +350,8 @@
                         }
                     });
 
-                    request.done(function(){
+                    request.done(function () {
+
                         event.target.parentElement.remove();
                     });
                 });
@@ -352,7 +368,8 @@
         * @param {HTMLElement} outputElement - The container to place the LaTeX iframe in.
         * @param {string} part - The part of the question to display (question, answer or rubric)
         */
-        function updateIframe(outputElement, part){
+        function updateIframe(outputElement, part) {
+
             outputElement.innerHTML = "";
             let smallPreview = document.createElement('iframe');
             let bigPreview = document.getElementById("big-preview");
@@ -361,8 +378,9 @@
             smallPreview.src = "/latex_window/question/" + {{question_id}} + "/"+ part + "/" + widthHTMLElement(smallPreview.contentDocument.body) + "/" ;
             bigPreview.src =  "/latex_window/question/" + {{question_id}} + "/"+ part + "/" + widthHTMLElement(bigPreview.contentDocument.body) + "/" ;
 
-            initLatexFrame(bigPreview);
-            initLatexFrame(smallPreview);
+        initLatexFrame(bigPreview);
+        initLatexFrame(smallPreview);
+
         }
 
         /**
@@ -374,10 +392,11 @@
         * @param {string} command - The part of the question to updated
         * (question, rubric, answer) 
         */
-        function renderOutput(input, outputId, command){
+        function renderOutput(input, outputId, command) {
             let request = $.ajax({
                 type: "POST",
-                headers:{'X-CSRFToken': "{{csrf_token}}"},
+                headers: { 'X-CSRFToken': "{{csrf_token}}" },
+
                 url: "/edit_question/{{question_id}}/",
                 dataType: 'json',
                 data: {
@@ -385,7 +404,7 @@
                     input: input,
                 }
             });
-            request.done(function(data){
+            request.done(function (data) {
                 let outputElement = document.getElementById(outputId);
                 updateIframe(outputElement, command);
             });
@@ -394,67 +413,69 @@
         /**
         * Initializes the buttons to render LaTeX.
         */
-        function initButtons(){
+        function initButtons() {
             let gradingInput = document.getElementById("grading-input");
             let renderGradingButton = document.getElementById("grading-button");
-            renderGradingButton.onclick = function(){renderOutput(gradingInput.value, "grading-output", "rubric")};
+            renderGradingButton.onclick = function () { renderOutput(gradingInput.value, "grading-output", "rubric") };
 
             let answerInput = document.getElementById("answer-input");
             let renderAnswerButton = document.getElementById("answer-button");
-            renderAnswerButton.onclick = function(){renderOutput(answerInput.value, "answer-output", "answer")};
+            renderAnswerButton.onclick = function () { renderOutput(answerInput.value, "answer-output", "answer") };
 
             let questionInput = document.getElementById("question-input");
             let renderQuestionButton = document.getElementById("question-button");
-            renderQuestionButton.onclick = function(){renderOutput(questionInput.value, "question-output", "question")};
+            renderQuestionButton.onclick = function () { renderOutput(questionInput.value, "question-output", "question") };
         }
 
         /**
         * Display attachments list and initialize render buttons.
         */
-        $(document).ready(function() {
+        $(document).ready(function () {
             let request = $.ajax({
                 type: "GET",
                 headers:{'X-CSRFToken': "{{csrf_token}}"},
                 url: "/fetch_attachments/question/{{question_id}}/",
                 dataType: 'json'
             });
-            request.done(function(data){
+            request.done(function (data) {
                 let filenames = [];
                 let urls = [];
-                for(const attachment of data["attachments"]){
+                for (const attachment of data["attachments"]) {
                     filenames.push(attachment["filename"]);
                     urls.push(attachment["url"]);
                 }
                 displayAttachments(filenames, urls);
                 initButtons();
             });
-        
-                var selectedVolume = document.getElementById("volume").value;
-                document.getElementById("volume").addEventListener("change", function () {
-                    var button = document.getElementById("volume-button");
-                    button.click();
-            }); 
+
+            var selectedVolume = document.getElementById("volume").value;
+            document.getElementById("volume").addEventListener("change", function () {
+                var button = document.getElementById("volume-button");
+                button.click();
+            });
         });
 
         /**
+
         * Add attachments to the list and the database.
         */
         document.getElementById('attachments').addEventListener('change', function (event) {
             let files = event.target.files;
-            for(const file of files){
+            for (const file of files) {
+
                 let formData = new FormData();
                 formData.append("command", "upload");
                 formData.append(file.name, file);
                 let request = $.ajax({
                     type: "POST",
-                    headers:{'X-CSRFToken': "{{csrf_token}}"},
+                    headers: { 'X-CSRFToken': "{{csrf_token}}" },
                     url: "/edit_question/{{question_id}}/",
                     dataType: 'json',
                     contentType: false,
                     processData: false,
                     data: formData
                 });
-                request.done(function(data){
+                request.done(function (data) {
                     let filenames = [];
                     let urls = [];
                     filenames.push(data['name']);

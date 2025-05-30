@@ -17,9 +17,9 @@ TIMEOUT = 10  # try to render the PDF for 10 seconds before failing
 # TODO: It would probably be good to have some kind of loading icon while PDFs are rendering
 
 
-def generateRandomString(hashId):
+def generateRandomString(hashId, length=8):
     random.seed(hashId)
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
 
 # Converts quiz object to volume string (just the number)
@@ -226,18 +226,6 @@ def latex_to_pdf(latex_question_list, support_list, quiz_data):
 
                 shutil.copy(blob_path, final_path)
 
-                output_file.write(r"\vspace{0.2cm}" + "\n")
-                output_file.write(r"\begin{center}" + "\n")
-
-                # removes file extension from  file_name
-                dotIndex = blob.filename[::-1].find(".")
-                blob_filename = blob.filename[: -1 * dotIndex - 1]
-
-                output_file.write(
-                    r"\includegraphics[width=2cm]{" + blob_filename + r"}" + "\n"
-                )
-                output_file.write(r"\end{center}" + "\n")
-
                 files_to_remove.append(final_path)
 
             pages_required = question_loc.question.pages_required
@@ -328,7 +316,7 @@ def latex_to_pdf(latex_question_list, support_list, quiz_data):
             output_file.write(r"\begin{minipage}[t]{0.40\textwidth}" + "\n\n")
             rubric_latex = question_loc.rubric_latex
             output_file.write(r"\textit{Rubric:} ")
-            output_file.write(answer_latex + "\n")
+            output_file.write(rubric_latex + "\n")
             output_file.write(r"\end{minipage}" + "\n\n")
 
         output_file.write(r"\end{enumerate}" + "\n")
@@ -348,6 +336,7 @@ def latex_to_pdf(latex_question_list, support_list, quiz_data):
     temp_path = os.path.join(
         script_path, r"..", tex_live_folder, "bin", os_folder, "pdftex"
     )
+
     pdflatex_path = os.path.abspath(temp_path)
 
     # Path to LaTeX file
@@ -377,7 +366,9 @@ def latex_to_pdf(latex_question_list, support_list, quiz_data):
 
     if error:
         print("Error occurred:")
-        print(error.decode("utf-8"))
+        if type(error) != type(""):
+            error = error.decode("utf-8")
+        print(error)
         for path in files_to_remove:
             os.remove(path)
         os.chdir(working_path)
