@@ -15,11 +15,12 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import path, include, re_path, reverse_lazy
 from . import views
 from django.conf.urls.static import static
 from django.contrib.auth.views import LogoutView
 from django.conf import settings
+from django.contrib.auth import views as auth_views
 
 
 urlpatterns = [
@@ -45,9 +46,6 @@ urlpatterns = [
     path("profile/", views.profile, name="profile"),
     path("profile/<uuid:user_id>/", views.user_info, name="user_info"),
     path("profile/edit/<uuid:user_id>/", views.user_edit, name="user_edit"),
-    path("reset/", views.reset, name="reset"),
-    path("reset_password/", views.reset_password, name="reset_password"),
-    path("reset_password/<uidb64>/<token>/", views.verify_reset, name="verify_reset"),
     path("user_directory/", views.user_directory, name="user_directory"),
     path("promotion/", views.promotion, name="promotion"),
     path("main/", views.main, name="main"),
@@ -88,4 +86,11 @@ urlpatterns = [
     path("question_approval/", views.question_approval, name="question_approval"),
     path("handles/", views.handles, name="handles"),
     path('delete-handle/<str:handle>/<int:site_id>/<uuid:user_id>', views.delete_handle, name='delete_handle'),
+    #TODO: Look into Django Auth views https://docs.djangoproject.com/en/5.1/topics/auth/default/
+    # But since login and register views were made custom, I am going to add as independent views
+    # instead of using Django Auth views in its entirety.
+    path('password_reset/', views.ResetPasswordView.as_view(), name='password_reset'),
+    path('password_reset_confirm/<uidb64>/<token>/',
+         views.ResetPasswordConfirmView.as_view(),
+         name='password_reset_confirm'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

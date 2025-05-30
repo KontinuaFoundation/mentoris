@@ -149,3 +149,7 @@ question_attachments/
 # Latex Stuff
 docs/latex/output_quiz.aux
 docs/latex/output_quiz.tex
+
+
+# Development email server
+dev_email_server/

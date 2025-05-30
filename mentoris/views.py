@@ -9,7 +9,7 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage
 from django.core.exceptions import ValidationError
-from django.urls import resolve, reverse
+from django.urls import resolve, reverse, reverse_lazy
 from django.core.mail import EmailMessage
 from django.shortcuts import render, get_object_or_404, redirect
 from django.template import loader
@@ -17,6 +17,8 @@ from django.template.loader import render_to_string
 from django.urls import resolve
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.contrib.auth.views import PasswordResetView, PasswordResetConfirmView
+from django.contrib.messages.views import SuccessMessageMixin
 from functools import wraps
 from mentapp.models import (
     Handle,
@@ -375,57 +377,6 @@ def sign_up(request):
 def profile(request):
     template = loader.get_template("mentapp/profile.html")
     return HttpResponse(template.render())
-
-
-def reset(request):
-    if request.method == "POST":
-        email_address = request.POST.get("email")
-        user = User.objects.get(email=email_address)
-        current_site = get_current_site(request)
-        subject = "Reset your password"
-        message = render_to_string(
-            "mentapp/reset_password_message.html",
-            {
-                "request": request,
-                "user": user,
-                "domain": current_site.domain,
-                "uid": urlsafe_base64_encode(force_bytes(user.pk)),
-                "token": email_verification_token.make_token(user),
-            },
-        )
-        email = EmailMessage(
-            subject, message, "notifications@kontinua.org", [email_address]
-        )
-        email.content_subtype = "html"
-        email.send()
-        return JsonResponse({"success": True})
-    return render(request, "mentapp/reset.html")
-
-
-def verify_reset(request, uidb64, token):
-    try:
-        uid = force_str(urlsafe_base64_decode(uidb64))
-        user = User.objects.get(pk=uid)
-    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-        user = None
-    if user and email_verification_token.check_token(user, token):
-        return redirect(f"/reset_password")
-    else:
-        messages.warning(request, "The link is invalid.")
-    return render(request, "mentapp/verify_email_confirm.html")
-
-
-def reset_password(request):
-    if request.method == "POST":
-        email = request.POST.get("email")
-        user = User.objects.get(email=email)
-        new_password = request.POST.get("new_password")
-        user.set_password(new_password)
-        user.save()
-        return JsonResponse({"success": True})
-    else:
-        return render(request, "mentapp/reset_password.html")
-
 
 def customLogin(request):
     if request.method == "POST":
@@ -1747,3 +1698,18 @@ def customLogout(request):
     if request.method == "GET":
         logout(request)
     return render(request, "mentapp/login.html")
+
+# Auth Views
+#TODO: Use login and logout generic views instead of above request based views.
+class ResetPasswordView(SuccessMessageMixin, PasswordResetView):
+    template_name = 'mentapp/users/password_reset.html'
+    email_template_name = 'mentapp/users/password_reset_email.html'
+    subject_template_name = 'mentapp/users/password_reset_subject.txt'
+    success_message = "If an account exists with the email you entered, we've emailed you instructions for setting your password."
+    success_url = reverse_lazy('login')
+
+class ResetPasswordConfirmView(SuccessMessageMixin, PasswordResetConfirmView):
+    template_name = 'mentapp/users/password_reset_confirm.html'
+    success_message = "Password reset successful"
+    success_url = reverse_lazy('login')
+    success_message_key = 'password_reset_success'
