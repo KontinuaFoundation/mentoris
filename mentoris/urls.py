@@ -17,6 +17,9 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path, reverse_lazy
 from . import views
+from .views import (
+    HeaderView, FooterView, DefaultView, SignUpView, ProfileView, CustomLoginView, MainView, ChapterView, QuizView, QuizMakerView, QuestionApprovalView, PromotionView, UserDirectoryView, UserEditView, VerifyEmailView, VerifyEmailConfirmView
+)
 from django.conf.urls.static import static
 from django.contrib.auth.views import LogoutView
 from django.conf import settings
@@ -24,9 +27,9 @@ from django.contrib.auth import views as auth_views
 
 
 urlpatterns = [
-    re_path(r".*/header.html/", views.header, name="header"),
-    re_path(r".*/footer.html/", views.footer, name="footer"),
-    path("", views.default, name="default"),
+    re_path(r".*/header.html/", HeaderView.as_view(), name="header"),
+    re_path(r".*/footer.html/", FooterView.as_view(), name="footer"),
+    path("", DefaultView.as_view(), name="default"),
     path("admin/", admin.site.urls),
     path("fetch_attachments/question/<int:question_id>/", views.fetch_attachments_question, name="fetch_attachments_question"),
     path("fetch_attachments/support/<int:support_id>/", views.fetch_attachments_support, name="fetch_attachment_support"),
@@ -34,27 +37,27 @@ urlpatterns = [
     path("fetch_attachments_inputs/question/<int:question_id>/<str:part>/", views.fetch_attachments_inputs_question, name="fetch_attachments_inputs_question"),
     path("latex_window/question/<int:question_id>/<str:part>/<int:width>/", views.latex_window_question, name = "latex_window_question"),
     path("latex_window/support/<int:support_id>/<int:width>/", views.latex_window_support, name="latex_window_support"),
-    path("login/", views.customLogin, name="login"),
+    path("login/", CustomLoginView.as_view(), name="login"),
     path('logoutCustom/', views.customLogout, name='logoutCustom'),
-    path("signUp/", views.sign_up, name="sign_up"),
-    path("verify_email/", views.verify_email, name="verify_email"),
+    path("signUp/", SignUpView.as_view(), name="sign_up"),
+    path("verify_email/", VerifyEmailView.as_view(), name="verify_email"),
     path(
         "verify_email/<uidb64>/<token>/",
-        views.verify_email_confirm,
+        VerifyEmailConfirmView.as_view(),
         name="verify_email_confirm",
     ),
-    path("profile/", views.profile, name="profile"),
+    path("profile/", ProfileView.as_view(), name="profile"),
     path("profile/<uuid:user_id>/", views.user_info, name="user_info"),
-    path("profile/edit/<uuid:user_id>/", views.user_edit, name="user_edit"),
-    path("user_directory/", views.user_directory, name="user_directory"),
-    path("promotion/", views.promotion, name="promotion"),
-    path("main/", views.main, name="main"),
-    path("main/<int:volume_id>/", views.main, name="main_vol_chap"),
-    path("main/<int:volume_id>/<chapter_id>/", views.chapter, name="chapter"),
-    path("main/<int:volume_id>/<chapter_id>/<int:quiz_id>", views.quiz, name="quiz"),
+    path("profile/edit/<uuid:user_id>/", UserEditView.as_view(), name="user_edit"),
+    path("user_directory/", UserDirectoryView.as_view(), name="user_directory"),
+    path("promotion/", PromotionView.as_view(), name="promotion"),
+    path("main/", MainView.as_view(), name="main"),
+    path("main/<int:volume_id>/", MainView.as_view(), name="main_vol_chap"),
+    path("main/<int:volume_id>/<chapter_id>/", ChapterView.as_view(), name="chapter"),
+    path("main/<int:volume_id>/<chapter_id>/<int:quiz_id>", QuizView.as_view(), name="quiz"),
     path(
         "main/<int:volume_id>/<chapter_id>/<int:quiz_id>/maker_view",
-        views.quiz_maker_view,
+        QuizMakerView.as_view(),
         name="quiz_maker_view",
     ),
     path("edit_quiz/<int:quiz_id>", views.edit_quiz, name="edit_quiz"),

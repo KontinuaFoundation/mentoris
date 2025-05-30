@@ -49,16 +49,18 @@ from mentapp.models import (
 from mentoris.email_verification_token_generator import email_verification_token
 from mentoris.forms import UserForm, LatexForm, QuizForm
 from mentoris.latex_to_pdf import latex_to_pdf
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views.generic import TemplateView, UpdateView
 
 
 
-def mentor_req(view_func):
-    @wraps(view_func)
-    def _wrapped_view(request, *args, **kwargs):
-        # Checking that there is a logged in user else return to the login page
+class MentorRequiredMixin:
+    """Mixin to require mentor, quizmaker, or admin status."""
+    def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return render(request, "mentapp/login.html")
-        # Checking that user is mentor (verified) or higher else returning an error
         if not (
             request.user.is_quizmaker
             or request.user.is_admin
@@ -67,59 +69,198 @@ def mentor_req(view_func):
             return HttpResponseForbidden(
                 "Forbidden: Must be mentor or quizmaker to access add questions page. Use request verification for mentor status"
             )
-        return view_func(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
-    return _wrapped_view
-
-
-def quizmaker_req(view_func):
-    @wraps(view_func)
-    def _wrapped_view(request, *args, **kwargs):
-        # Checking that there is a logged in user else return to the login page
+class QuizmakerRequiredMixin:
+    """Mixin to require quizmaker or admin status."""
+    def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return render(request, "mentapp/login.html")
-        # Checking user is quiz maker or higher else returning forbidden HTTP page.
         if not (request.user.is_quizmaker or request.user.is_admin):
             return HttpResponseForbidden(
                 "Forbidden: Must be quizmaker or admin to access edit quiz. Must request verification"
             )
-        return view_func(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
-    return _wrapped_view
-
-
-def admin_req(view_func):
-    @wraps(view_func)
-    def _wrapped_view(request, *args, **kwargs):
-        # Checking that there is a logged in user else return to the login page
+class AdminRequiredMixin:
+    """Mixin to require admin status."""
+    def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return redirect("admin:login")
-        # Must be admin!
         if not request.user.is_admin:
             return HttpResponseForbidden("Forbidden: Must be admin to access.")
-        return view_func(request, *args, **kwargs)
-
-    return _wrapped_view
+        return super().dispatch(request, *args, **kwargs)
 
 
-@mentor_req
-def latex(request, question_id):
-    volumes = (
-        Volume.objects.values_list("volume_id", flat=True)
-        .distinct()
-        .order_by("volume_id")
-    )
+@method_decorator(MentorRequiredMixin, name='dispatch')
+class Latex(View):
+    def post(self, request, question_id):
+        if request.POST.get("command") == "deleteAttachment":
+            question =  get_object_or_404(Question, question_id = question_id)
+            question_loc = get_object_or_404(Question_Loc, question = question, lang_code = "ENG", dialect_code = "US")
+            attachment = get_object_or_404(Question_Attachment, question = question_loc, filename = request.POST.get("filename"))
+            attachment.blob_key.delete()
+            attachment.delete()
+            return JsonResponse({"success": True})
+        
+        if request.POST.get("command") == "answer":
+            question =  get_object_or_404(Question, question_id = question_id)
+            question_loc = get_object_or_404(Question_Loc, question = question, lang_code = "ENG", dialect_code = "US")
+            question_loc.answer_latex = request.POST.get("input")
+            question_loc.save()
+            return JsonResponse({"success": True})
+        
+        if request.POST.get("command") == "rubric":
+            question =  get_object_or_404(Question, question_id = question_id)
+            question_loc = get_object_or_404(Question_Loc, question = question, lang_code = "ENG", dialect_code = "US")
+            question_loc.rubric_latex = request.POST.get("input")
+            question_loc.save()
+            return JsonResponse({"success": True})
+        
+        if request.POST.get("command") == "question":
+            question =  get_object_or_404(Question, question_id = question_id)
+            question_loc = get_object_or_404(Question_Loc, question = question, lang_code = "ENG", dialect_code = "US")
 
-    volume_id = 1
-    chapters = Chapter.objects.filter(volume__volume_id=volume_id).distinct()
+            question_loc.question_latex = request.POST.get("input")
+            question_loc.save()
+            return JsonResponse({"success": True})
 
-    chapter_locs = Chapter_Loc.objects.filter(
-        chapter__chapter_id__in=chapters
-    ).distinct()
+        if request.POST.get("command") == "upload":
+            question =  get_object_or_404(Question, question_id = question_id)
+            question_loc = get_object_or_404(Question_Loc, question = question, lang_code = "ENG", dialect_code = "US")
+            for filename, file in request.FILES.items():
+                name = filename[0:filename.rfind(".")]
+                blob = Blob(file = file, content_type = file.content_type, filename= name)
+                attachment = Question_Attachment(question = question_loc, blob_key = blob, filename = name)
+                blob.save()
+                attachment.save()
+            
 
-    chapter_object = chapter_locs[0]
+            return JsonResponse({"success": True, "url": blob.file.url, "name": name})
+        form = LatexForm(request.POST)
+        question = request.POST.get("latex_question")
+        answer = request.POST.get("latex_answer")
+        grading = request.POST.get("latex_grading")
+        volume_id = request.POST.get("volume")
+        volume_id = int(volume_id)
+        chapters = Chapter.objects.filter(volume__volume_id=volume_id).distinct()
 
-    if request.method == "POST":
+        chapter_locs = Chapter_Loc.objects.filter(
+            chapter__chapter_id__in=chapters
+        ).distinct()
+
+        if "submit-question" in request.POST:
+            question_object = Question()
+            question_loc = Question_Loc()
+
+            # TODO: question_object.creator = CURRENT USER
+
+            chapter_object = request.POST.get("chapter")
+            chapter_string = chapter_object.split("_")
+            chapter_title = chapter_string[0]
+            chapter_loc = get_object_or_404(Chapter_Loc, title=chapter_title)
+            question_object.chapter = chapter_loc.chapter
+
+            question_object.conceptual_difficulty = request.POST.get("difficulty")
+            question_object.time_required_mins = request.POST.get("time_required")
+            question_object.point_value = request.POST.get("points")
+            question_object.pages_required = request.POST.get("pages_required")
+            question_object.save()
+
+            question_loc.question = question_object
+            question_loc.question_latex = question
+            question_loc.answer_latex = answer
+            question_loc.rubric_latex = grading
+
+            question_loc.save()
+
+            question_attachments = request.FILES.getlist("attachments")
+
+            for attachment in question_attachments:
+
+                blob = Blob(
+                    file=attachment,
+                    content_type=attachment.content_type,
+                    filename=attachment.name,
+                )
+                blob.save()
+
+                question_attachment_instance = Question_Attachment(
+                    question=question_loc,
+                    lang_code=question_loc.lang_code,
+                    dialect_code=question_loc.dialect_code,
+                    filename=blob.filename,
+                    blob_key=blob,
+                )
+                question_attachment_instance.save()
+
+            chapter_id = chapter_loc.chapter.chapter_id
+
+            return redirect(f"../main/{volume_id}/{chapter_id}")
+
+        if "volume-button" not in request.POST:
+            chapter_object = request.POST.get("chapter")
+            chapter_string = chapter_object.split("_")
+            chapter_title = chapter_string[0]
+            chapter_object = get_object_or_404(Chapter_Loc, title=chapter_title)
+        else:
+            chapter_object = chapters[0]
+
+        return render(
+            request,
+            "mentapp/latex_question.html",
+            {
+                "question_id": question_id,
+                "form": form,
+                "question": question,
+                "answer": answer,
+                "grading": grading,
+                "volume_id": volume_id,
+                "volumes": volumes,
+                "chapters": chapter_locs,
+                "chapter": chapter_object,
+            },
+        )
+    else:
+        return render(
+            request,
+            "mentapp/latex_question.html",
+            {
+                "form": LatexForm(),
+                "volumes": volumes,
+                "volume_id": volume_id,
+                "chapters": chapter_locs,
+                "chapter": chapter_object,
+            },
+        )
+
+
+class LatexView(MentorRequiredMixin, View):
+    def get(self, request, question_id):
+        volumes = (
+            Volume.objects.values_list("volume_id", flat=True)
+            .distinct()
+            .order_by("volume_id")
+        )
+        volume_id = 1
+        chapters = Chapter.objects.filter(volume__volume_id=volume_id).distinct()
+        chapter_locs = Chapter_Loc.objects.filter(
+            chapter__chapter_id__in=chapters
+        ).distinct()
+        chapter_object = chapter_locs[0]
+        return render(
+            request,
+            "mentapp/latex_question.html",
+            {
+                "form": LatexForm(),
+                "volumes": volumes,
+                "volume_id": volume_id,
+                "chapters": chapter_locs,
+                "chapter": chapter_object,
+            },
+        )
+
+    def post(self, request, question_id):
         if request.POST.get("command") == "deleteAttachment":
             question =  get_object_or_404(Question, question_id = question_id)
             question_loc = get_object_or_404(Question_Loc, question = question, lang_code = "ENG", dialect_code = "US")
@@ -269,6 +410,16 @@ def default(request):
         return redirect(f"../main")
 
 
+class DefaultView(View):
+    def get(self, request):
+        if not request.user or hasattr(request, "user"):
+            return redirect(f"../login")
+        elif not request.user.is_verified:
+            return redirect(f"../profile/{request.user.user_id}")
+        else:
+            return redirect(f"../main")
+
+
 def sign_up(request):
     if request.method == "POST":
         # Add to User table
@@ -360,10 +511,97 @@ def sign_up(request):
     else:
         return render(request, "mentapp/sign_up.html")
 
+
+class SignUpView(View):
+    def get(self, request):
+        return render(request, "mentapp/sign_up.html")
+
+    def post(self, request):
+        form = UserForm(request.POST)
+        if form.is_valid():
+            email_exists = False
+            other_email_exists = False
+            if Email.objects.filter(email_address=request.POST.get("email_address")).exists():
+                email_exists = True
+            other_emails = request.POST.get("other_emails")
+            if other_emails is not None and other_emails != "":
+                email_list = other_emails.split(",")
+                for other_email in email_list:
+                    if Email.objects.filter(email_address=other_email.strip()).exists():
+                        other_email_exists = True
+            if email_exists or other_email_exists:
+                if email_exists:
+                    form.add_error(None, "Primary")
+                if other_email_exists:
+                    form.add_error(None, "Other")
+                return render(
+                    request,
+                    "mentapp/sign_up.html",
+                    {
+                        "form": form,
+                        "email": request.POST.get("email_address"),
+                        "other_emails": request.POST.get("other_emails"),
+                    },
+                )
+            user = form.save(commit=False)
+            user.email = request.POST.get("email_address")
+            user.is_active = True
+            user.save()
+            verification_object = Verification()
+            verification_object.verified = user
+            verification_object.verifier = user
+            verification_object.save()
+            email = request.POST.get("email_address")
+            emailObject = Email()
+            emailObject.email_address = email
+            emailObject.user = user
+            emailObject.is_primary = True
+            emailObject.save()
+            other_emails = request.POST.get("other_emails")
+            if other_emails is not None and other_emails != "":
+                email_list = other_emails.split(",")
+                for other_email in email_list:
+                    emailObject = Email()
+                    emailObject.email_address = other_email.strip()
+                    emailObject.user = user
+                    emailObject.is_primary = False
+                    emailObject.save()
+            github = request.POST.get("github")
+            if github and github != "":
+                handleObject = Handle(
+                    user=user, site=Site.objects.get(site_id="github"), handle=github
+                )
+                handleObject.save()
+            x = request.POST.get("x")
+            if x and x != "":
+                handleObject = Handle(
+                    user=user, site=Site.objects.get(site_id="x"), handle=x
+                )
+                handleObject.save()
+            user = authenticate(
+                username=email, password=request.POST.get("password_hash")
+            )
+            login(request, user)
+            return redirect("verify_email")
+        return render(
+            request,
+            "mentapp/sign_up.html",
+            {
+                "form": form,
+            },
+        )
+    else:
+        return render(request, "mentapp/sign_up.html")
+
 @login_required
 def profile(request):
     template = loader.get_template("mentapp/profile.html")
     return HttpResponse(template.render())
+
+class ProfileView(LoginRequiredMixin, View):
+    def get(self, request):
+        template = loader.get_template("mentapp/profile.html")
+        return HttpResponse(template.render())
 
 def customLogin(request):
     if request.method == "POST":
@@ -390,148 +628,211 @@ def customLogin(request):
         return render(request, "mentapp/login.html")
 
 
-@mentor_req
-def main(request, volume_id=1):
-    template = loader.get_template("mentapp/main.html")
+class CustomLoginView(View):
+    def get(self, request):
+        return render(request, "mentapp/login.html")
 
-    volumes = (
-        Volume.objects.values_list("volume_id", flat=True)
-        .distinct()
-        .order_by("volume_id")
-    )
-
-    if volume_id:
-        chapters = Chapter.objects.filter(volume__volume_id=volume_id).distinct()
-    else:
-        chapters = []
-
-    chapter_locs = Chapter_Loc.objects.filter(
-        chapter__chapter_id__in=chapters
-    ).distinct()
-
-    context = {
-        "volumes": volumes,
-        "chapters": chapters,
-        "volume_id": volume_id,
-        "chapter_locs": chapter_locs,
-    }
-
-    return HttpResponse(template.render(context, request))
-
-
-def chapter(request, volume_id, chapter_id):
-    volume_id = get_object_or_404(Volume, volume_id=volume_id)
-    chapter_id = get_object_or_404(Chapter, chapter_id=chapter_id)
-    try:
-        chapter_loc = Chapter_Loc.objects.get(chapter=chapter_id)
-        title = chapter_loc.title
-    except Chapter_Loc.DoesNotExist:
-        title = None
-    try:
-        quizzes = Quiz.objects.filter(chapter=chapter_id, volume=volume_id)
-    except Quiz.DoesNotExist:
-        quizzes = None
-
-    return render(
-        request,
-        "mentapp/chapter.html",
-        {
-            "volume": volume_id,
-            "chapter": chapter_id,
-            "title": title,
-            "quizzes": quizzes,
-        },
-    )
-
-
-@mentor_req
-def quiz(request, volume_id, chapter_id, quiz_id):
-    volume_id = get_object_or_404(Volume, volume_id=volume_id)
-    chapter_id = get_object_or_404(Chapter, chapter_id=chapter_id)
-    quiz_id = get_object_or_404(Quiz, quiz_id=quiz_id)
-
-    if request.method == "POST":
-        if request.POST.get("command") == "viewer_publish":
-            feedback = Quiz_Feedback()
-            feedback.quiz = quiz_id
-            feedback.creator_id = quiz_id.creator_id
-            feedback.viewer_id = request.user
-
-            feedback.challenge_rating = int(request.POST.get("challenge_rating"))
-            feedback.time_rating = int(request.POST.get("time_rating"))
-            feedback.viewer_comment = request.POST.get("viewer_comment")
-            feedback.save()
-            return JsonResponse({"success": True})
-        elif request.POST.get("command") == "delete":
-            feedback = Quiz_Feedback.objects.get(
-                quiz=quiz_id,
-                feedback_id=request.POST.get("feedback_id"),
+    def post(self, request):
+        email = request.POST.get("email")
+        password = request.POST.get("password")
+        user = authenticate(request, username=email, password=password)
+        if user is not None and user.is_verified:
+            login(request, user)
+            return redirect("main")
+        elif user is not None and not user.is_verified:
+            login(request, user)
+            return redirect(f"/profile/{user.user_id}")
+        else:
+            messages.error(
+                request,
+                "Could not find account, please double-check account credentials",
             )
-            feedback.delete()
-            return JsonResponse({"success": True})
-    else:
-        avg_rating = quiz_id.conceptual_difficulty
-        avg_time = quiz_id.time_required_mins
+            return render(
+                request,
+                "mentapp/login.html",
+                {"email": email, "password": password},
+            )
 
+
+@method_decorator(MentorRequiredMixin, name='dispatch')
+class Main(View):
+    def get(self, request, volume_id=1):
+        template = loader.get_template("mentapp/main.html")
+
+        volumes = (
+            Volume.objects.values_list("volume_id", flat=True)
+            .distinct()
+            .order_by("volume_id")
+        )
+
+        if volume_id:
+            chapters = Chapter.objects.filter(volume__volume_id=volume_id).distinct()
+        else:
+            chapters = []
+
+        chapter_locs = Chapter_Loc.objects.filter(
+            chapter__chapter_id__in=chapters
+        ).distinct()
+
+        context = {
+            "volumes": volumes,
+            "chapters": chapters,
+            "volume_id": volume_id,
+            "chapter_locs": chapter_locs,
+        }
+
+        return HttpResponse(template.render(context, request))
+
+
+class ChapterView(View):
+    def get(self, request, volume_id, chapter_id):
+        volume_id_obj = get_object_or_404(Volume, volume_id=volume_id)
+        chapter_id_obj = get_object_or_404(Chapter, chapter_id=chapter_id)
+        try:
+            chapter_loc = Chapter_Loc.objects.get(chapter=chapter_id_obj)
+            title = chapter_loc.title
+        except Chapter_Loc.DoesNotExist:
+            title = None
+        try:
+            quizzes = Quiz.objects.filter(chapter=chapter_id_obj, volume=volume_id_obj)
+        except Quiz.DoesNotExist:
+            quizzes = None
+        return render(
+            request,
+            "mentapp/chapter.html",
+            {
+                "volume": volume_id_obj,
+                "chapter": chapter_id_obj,
+                "title": title,
+                "quizzes": quizzes,
+            },
+        )
+
+
+@method_decorator(MentorRequiredMixin, name='dispatch')
+class Quiz(View):
+    def post(self, request, volume_id, chapter_id, quiz_id):
+        volume_id = get_object_or_404(Volume, volume_id=volume_id)
+        chapter_id = get_object_or_404(Chapter, chapter_id=chapter_id)
+        quiz_id = get_object_or_404(Quiz, quiz_id=quiz_id)
+
+        if request.method == "POST":
+            if request.POST.get("command") == "viewer_publish":
+                feedback = Quiz_Feedback()
+                feedback.quiz = quiz_id
+                feedback.creator_id = quiz_id.creator_id
+                feedback.viewer_id = request.user
+
+                feedback.challenge_rating = int(request.POST.get("challenge_rating"))
+                feedback.time_rating = int(request.POST.get("time_rating"))
+                feedback.viewer_comment = request.POST.get("viewer_comment")
+                feedback.save()
+                return JsonResponse({"success": True})
+            elif request.POST.get("command") == "delete":
+                feedback = Quiz_Feedback.objects.get(
+                    quiz=quiz_id,
+                    feedback_id=request.POST.get("feedback_id"),
+                )
+                feedback.delete()
+                return JsonResponse({"success": True})
+        else:
+            avg_rating = quiz_id.conceptual_difficulty
+            avg_time = quiz_id.time_required_mins
+
+            try:
+                reviews = []
+                review_objects = Quiz_Feedback.objects.filter(
+                    quiz=quiz_id,
+                    date_completed__isnull=True,
+                ).distinct()
+
+                challenge_ratings = 0
+                time_ratings = 0
+
+                for review in review_objects:
+                    challenge_ratings += review.challenge_rating
+                    time_ratings += review.time_rating
+                    email = Email.objects.get(user=review.viewer_id, is_primary=True)
+                    reviews.append([email, review])
+
+                if len(review_objects) > 1:
+                    avg_rating = challenge_ratings / len(review_objects)
+                    avg_time = time_ratings / len(review_objects)
+            except:
+                reviews = []
+
+            creator = User()
+            creator_email = Email()
+            try:
+                creator = User.objects.get(user_id=quiz_id.creator_id.user_id)
+                creator_email = Email.objects.get(user=creator, is_primary=True)
+            except (
+                User.DoesNotExist,
+                Email.DoesNotExist,
+                User.DoesNotExist,
+                AttributeError,
+            ) as error:
+                pass
+
+            return render(
+                request,
+                "mentapp/quiz.html",
+                {
+                    "volume": volume_id,
+                    "chapter": chapter_id,
+                    "quiz": quiz_id,
+                    "reviews": reviews,
+                    "creator": creator_email,
+                    "avg_rating": int(avg_rating),
+                    "avg_time": int(avg_time),
+                },
+            )
+
+
+@method_decorator(QuizmakerRequiredMixin, name='dispatch')
+class QuizMakerView(QuizmakerRequiredMixin, View):
+    def get(self, request, volume_id, chapter_id, quiz_id):
+        volume_id_obj = get_object_or_404(Volume, volume_id=volume_id)
+        chapter_id_obj = get_object_or_404(Chapter, chapter_id=chapter_id)
+        quiz_id_obj = get_object_or_404(Quiz, quiz_id=quiz_id)
+        avg_rating = quiz_id_obj.conceptual_difficulty
+        avg_time = quiz_id_obj.time_required_mins
         try:
             reviews = []
             review_objects = Quiz_Feedback.objects.filter(
-                quiz=quiz_id,
+                quiz=quiz_id_obj,
                 date_completed__isnull=True,
             ).distinct()
-
             challenge_ratings = 0
             time_ratings = 0
-
             for review in review_objects:
                 challenge_ratings += review.challenge_rating
                 time_ratings += review.time_rating
                 email = Email.objects.get(user=review.viewer_id, is_primary=True)
                 reviews.append([email, review])
-
-            if len(review_objects) > 1:
-                avg_rating = challenge_ratings / len(review_objects)
-                avg_time = time_ratings / len(review_objects)
+            avg_rating = challenge_ratings / len(review_objects)
+            avg_time = time_ratings / len(review_objects)
         except:
             reviews = []
-
-        creator = User()
-        creator_email = Email()
-        try:
-            creator = User.objects.get(user_id=quiz_id.creator_id.user_id)
-            creator_email = Email.objects.get(user=creator, is_primary=True)
-        except (
-            User.DoesNotExist,
-            Email.DoesNotExist,
-            User.DoesNotExist,
-            AttributeError,
-        ) as error:
-            pass
-
+        creator = User.objects.get(user_id=quiz_id_obj.creator_id.user_id)
+        creator_email = Email.objects.get(user=creator, is_primary=True)
         return render(
             request,
-            "mentapp/quiz.html",
+            "mentapp/quiz_maker_view.html",
             {
-                "volume": volume_id,
-                "chapter": chapter_id,
-                "quiz": quiz_id,
+                "volume": volume_id_obj,
+                "chapter": chapter_id_obj,
+                "quiz": quiz_id_obj,
                 "reviews": reviews,
                 "creator": creator_email,
                 "avg_rating": int(avg_rating),
                 "avg_time": int(avg_time),
             },
         )
-
-
-@quizmaker_req
-def quiz_maker_view(request, volume_id, chapter_id, quiz_id):
-    volume_id = get_object_or_404(Volume, volume_id=volume_id)
-    chapter_id = get_object_or_404(Chapter, chapter_id=chapter_id)
-    quiz_id = get_object_or_404(Quiz, quiz_id=quiz_id)
-
-    if request.method == "POST":
+    def post(self, request, volume_id, chapter_id, quiz_id):
+        quiz_id_obj = get_object_or_404(Quiz, quiz_id=quiz_id)
         feedback = Quiz_Feedback.objects.get(
-            quiz=quiz_id,
+            quiz=quiz_id_obj,
             feedback_id=request.POST.get("feedback_id"),
         )
         if request.POST.get("command") == "resolve":
@@ -543,52 +844,29 @@ def quiz_maker_view(request, volume_id, chapter_id, quiz_id):
             feedback.creator_comment = request.POST.get("creator_comment")
             feedback.save()
         return JsonResponse({"success": True})
-    else:
-        avg_rating = quiz_id.conceptual_difficulty
-        avg_time = quiz_id.time_required_mins
 
+
+@method_decorator(QuizmakerRequiredMixin, name='dispatch')
+class QuestionApprovalView(QuizmakerRequiredMixin, View):
+    def get(self, request):
         try:
-            reviews = []
-            review_objects = Quiz_Feedback.objects.filter(
-                quiz=quiz_id,
-                date_completed__isnull=True,
-            ).distinct()
-
-            challenge_ratings = 0
-            time_ratings = 0
-
-            for review in review_objects:
-                challenge_ratings += review.challenge_rating
-                time_ratings += review.time_rating
-                email = Email.objects.get(user=review.viewer_id, is_primary=True)
-                reviews.append([email, review])
-
-            avg_rating = challenge_ratings / len(review_objects)
-            avg_time = time_ratings / len(review_objects)
+            question_locs = Question_Loc.objects.order_by("date_created")
+            question_info = []
+            for question_loc in question_locs:
+                question = question_loc.question
+                if question.approval_requested and not question.approved:
+                    question_info = [question, question_loc]
+                    break
+            chapter_loc = Chapter_Loc.objects.get(chapter=question.chapter)
+            question_info.append(chapter_loc)
         except:
-            reviews = []
-
-        creator = User.objects.get(user_id=quiz_id.creator_id.user_id)
-        creator_email = Email.objects.get(user=creator, is_primary=True)
-
+            question_info = []
         return render(
             request,
-            "mentapp/quiz_maker_view.html",
-            {
-                "volume": volume_id,
-                "chapter": chapter_id,
-                "quiz": quiz_id,
-                "reviews": reviews,
-                "creator": creator_email,
-                "avg_rating": int(avg_rating),
-                "avg_time": int(avg_time),
-            },
+            "mentapp/question_approval.html",
+            {"question": question_info},
         )
-
-
-@quizmaker_req
-def question_approval(request):
-    if request.method == "POST":
+    def post(self, request):
         question = Question.objects.get(
             question_id=request.POST.get("question_id"),
         )
@@ -602,107 +880,88 @@ def question_approval(request):
         question.save()
         return JsonResponse({"success": True})
 
-    try:
-        question_locs = Question_Loc.objects.order_by("date_created")
-        question_info = []
 
-        for question_loc in question_locs:
-            question = question_loc.question
-            if question.approval_requested and not question.approved:
-                question_info = [question, question_loc]
-                break
+@method_decorator(AdminRequiredMixin, name='dispatch')
+class Promotion(View):
+    def post(self, request):
+        if request.method == "POST":
+            email_object = Email.objects.get(
+                email_address=request.POST.get("email"), is_primary=True
+            )
+            user = email_object.user
 
-        chapter_loc = Chapter_Loc.objects.get(chapter=question.chapter)
-        question_info.append(chapter_loc)
-    except:
-        question_info = []
+            if request.POST.get("command") == "promote":
+                if user.is_active == True:
+                    if user.is_quizmaker == True:
+                        user.is_admin = True
+                    elif user.is_verified == True:
+                        user.is_quizmaker = True
+                    elif user.is_verified == False:
+                        user.is_verified = True
 
-    return render(
-        request,
-        "mentapp/question_approval.html",
-        {"question": question_info},
-    )
+            user.promotion_requested = False
+            user.save()
 
-
-@admin_req
-def promotion(request):
-    if request.method == "POST":
-        email_object = Email.objects.get(
-            email_address=request.POST.get("email"), is_primary=True
-        )
-        user = email_object.user
-
-        if request.POST.get("command") == "promote":
-            if user.is_active == True:
-                if user.is_quizmaker == True:
-                    user.is_admin = True
-                elif user.is_verified == True:
-                    user.is_quizmaker = True
-                elif user.is_verified == False:
-                    user.is_verified = True
-
-        user.promotion_requested = False
-        user.save()
-
-        verification_object = Verification.objects.get(verified=user)
-        verification_object.verifier = request.user
-        verification_object.save()
-        return JsonResponse({"success": True})
-    else:
-        return render(
-            request,
-            "mentapp/promotion.html",
-            {
-                "newbies": grab_users(False, False, False, True, True),
-                "mentors": grab_users(True, False, False, True, True),
-                "quiz_makers": grab_users(True, True, False, True, True),
-            },
-        )
-
-
-@admin_req
-def user_directory(request):
-    if request.method == "POST":
-        email_object = Email.objects.get(
-            email_address=request.POST.get("email"), is_primary=True
-        )
-        user = email_object.user
-        status = "Newbie"
-        color = "btn btn-outline-secondary"
-
-        if request.POST.get("command") == "demote":
-            if user.is_active == True:
-                if user.is_admin == True:
-                    user.is_admin = False
-                    status = "Quiz Maker"
-                    color = "btn btn-outline-warning"
-                elif user.is_quizmaker == True:
-                    user.is_quizmaker = False
-                    status = "Mentor"
-                    color = "btn btn-outline-info"
-                elif user.is_verified == True:
-                    user.is_verified = False
+            verification_object = Verification.objects.get(verified=user)
+            verification_object.verifier = request.user
+            verification_object.save()
+            return JsonResponse({"success": True})
         else:
-            user.is_active = False
+            return render(
+                request,
+                "mentapp/promotion.html",
+                {
+                    "newbies": grab_users(False, False, False, True, True),
+                    "mentors": grab_users(True, False, False, True, True),
+                    "quiz_makers": grab_users(True, True, False, True, True),
+                },
+            )
 
-        user.save()
 
-        verification_object = Verification.objects.get(verified=user)
-        verification_object.verifier = request.user
-        verification_object.save()
+@method_decorator(AdminRequiredMixin, name='dispatch')
+class UserDirectory(View):
+    def post(self, request):
+        if request.method == "POST":
+            email_object = Email.objects.get(
+                email_address=request.POST.get("email"), is_primary=True
+            )
+            user = email_object.user
+            status = "Newbie"
+            color = "btn btn-outline-secondary"
 
-        return JsonResponse({"success": True, "status": status, "color": color})
-    else:
-        return render(
-            request,
-            "mentapp/user_directory.html",
-            {
-                "newbies": grab_users(False, False, False, True, False),
-                "mentors": grab_users(True, False, False, True, False),
-                "quiz_makers": grab_users(True, True, False, True, False),
-                "admins": grab_users(True, True, True, True, False),
-            },
-        )
+            if request.POST.get("command") == "demote":
+                if user.is_active == True:
+                    if user.is_admin == True:
+                        user.is_admin = False
+                        status = "Quiz Maker"
+                        color = "btn btn-outline-warning"
+                    elif user.is_quizmaker == True:
+                        user.is_quizmaker = False
+                        status = "Mentor"
+                        color = "btn btn-outline-info"
+                    elif user.is_verified == True:
+                        user.is_verified = False
+            else:
+                user.is_active = False
+
+            user.save()
+
+            verification_object = Verification.objects.get(verified=user)
+            verification_object.verifier = request.user
+            verification_object.save()
+
+            return JsonResponse({"success": True, "status": status, "color": color})
+        else:
+            return render(
+                request,
+                "mentapp/user_directory.html",
+                {
+                    "newbies": grab_users(False, False, False, True, False),
+                    "mentors": grab_users(True, False, False, True, False),
+                    "quiz_makers": grab_users(True, True, False, True, False),
+                    "admins": grab_users(True, True, True, True, False),
+                },
+            )
 
 
 def grab_users(verified, quiz_maker, admin, active, get_promotion):
@@ -1127,18 +1386,11 @@ def edit_quiz_add_support(request, quiz_id):
     )
 
 
-def header(request):
-    return render(
-        request,
-        "mentapp/header.html",
-    )
+class HeaderView(TemplateView):
+    template_name = "mentapp/header.html"
 
-
-def footer(request):
-    return render(
-        request,
-        "mentapp/footer.html",
-    )
+class FooterView(TemplateView):
+    template_name = "mentapp/footer.html"
 
 
 def user_edit(request, user_id):
@@ -1169,8 +1421,10 @@ def user_edit(request, user_id):
     return redirect(f"/profile/{user.user_id}")
 
 
-def verify_email(request):
-    if request.method == "POST":
+class VerifyEmailView(LoginRequiredMixin, View):
+    def get(self, request):
+        return render(request, "mentapp/verify_email.html")
+    def post(self, request):
         email_address = request.user.email
         email_object = Email.objects.get(email_address=email_address)
 
@@ -1196,27 +1450,26 @@ def verify_email(request):
             return JsonResponse({"success": True})
         else:
             return redirect("sign_up")
-    return render(request, "mentapp/verify_email.html")
 
 
-def verify_email_confirm(request, uidb64, token):
-    try:
-        uid = force_str(urlsafe_base64_decode(uidb64))
-        user = User.objects.get(pk=uid)
-    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-        user = None
-
-    if user and email_verification_token.check_token(user, token):
-        email = user.email
-        email_object = Email.objects.get(email_address=email)
-        email_object.is_verified = True
-        email_object.save()
-        messages.success(request, "Your email has been verified.")
-        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-        return redirect("user_info", user_id=user.user_id)
-    else:
-        messages.warning(request, "The link is invalid.")
-    return render(request, "mentapp/verify_email_confirm.html")
+class VerifyEmailConfirmView(View):
+    def get(self, request, uidb64, token):
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = None
+        if user and email_verification_token.check_token(user, token):
+            email = user.email
+            email_object = Email.objects.get(email_address=email)
+            email_object.is_verified = True
+            email_object.save()
+            messages.success(request, "Your email has been verified.")
+            login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+            return redirect("user_info", user_id=user.user_id)
+        else:
+            messages.warning(request, "The link is invalid.")
+        return render(request, "mentapp/verify_email_confirm.html")
 
 
 # def request_translation(request, user_id):
@@ -1293,24 +1546,25 @@ def upload_pdf(request, pdf_path):
         return JsonResponse({"status": "error", "message": str(e)})
 
 
-@quizmaker_req
-def create_quiz(request, volume_id, chapter_id):
-    if request.method == "POST":
-        # Create a new Quiz instance
-        quiz = Quiz.objects.create(
-            conceptual_difficulty=1,
-            time_required_mins=10,
-            calculator_allowed=False,
-            computer_allowed=False,
-            internet_allowed=False,
-            book_allowed=False,
-            volume_id=volume_id,
-            chapter_id=chapter_id,
-            creator_id=request.user,
-        )
+@method_decorator(QuizmakerRequiredMixin, name='dispatch')
+class CreateQuiz(View):
+    def post(self, request, volume_id, chapter_id):
+        if request.method == "POST":
+            # Create a new Quiz instance
+            quiz = Quiz.objects.create(
+                conceptual_difficulty=1,
+                time_required_mins=10,
+                calculator_allowed=False,
+                computer_allowed=False,
+                internet_allowed=False,
+                book_allowed=False,
+                volume_id=volume_id,
+                chapter_id=chapter_id,
+                creator_id=request.user,
+            )
 
-        # Redirect to the edit page for the new quiz
-        return redirect("/edit_quiz/{}".format(quiz.quiz_id))
+            # Redirect to the edit page for the new quiz
+            return redirect("/edit_quiz/{}".format(quiz.quiz_id))
 
 
 def delete_quiz(request, quiz_id):
@@ -1359,9 +1613,7 @@ def fetch_attachments_support(request, support_id):
 # Returns a JSON response with the attachment files and names and the LaTeX
 def fetch_attachments_inputs_support(request, support_id):
     support = get_object_or_404(Support, support_id=support_id)
-    support_Loc = get_object_or_404(
-        Support_Loc, support=support, lang_code="ENG", dialect_code="US"
-    )
+    support_Loc = get_object_or_404(Support_Loc, support=support, lang_code="ENG", dialect_code="US")
     input = support_Loc.content_latex
     attachmentsList = grab_attachments_support(support_id)
     return JsonResponse({"attachments": attachmentsList, "input": input})
@@ -1535,7 +1787,7 @@ def fetch_attachments_support(request, support_id):
 # Returns a JSON response with the attachment files and names and the LaTeX
 def fetch_attachments_inputs_support(request, support_id):
     support =  get_object_or_404(Support, support_id = support_id)
-    support_Loc = get_object_or_404(Support_Loc, support = support, lang_code="ENG", dialect_code="US")
+    support_Loc = get_object_or_404(Support_Loc, support = support, lang_code="ENG", dialect_code = "US")
     input = support_Loc.content_latex
     attachmentsList = grab_attachments_support(support_id)
     return JsonResponse({"attachments": attachmentsList, "input" : input})
@@ -1753,3 +2005,148 @@ def edit_question(request, question_id):
                 "chapter": chapter_object,
             }
         )
+
+class MainView(MentorRequiredMixin, View):
+    def get(self, request, volume_id=1):
+        template = loader.get_template("mentapp/main.html")
+        volumes = (
+            Volume.objects.values_list("volume_id", flat=True)
+            .distinct()
+            .order_by("volume_id")
+        )
+        if volume_id:
+            chapters = Chapter.objects.filter(volume__volume_id=volume_id).distinct()
+        else:
+            chapters = []
+        chapter_locs = Chapter_Loc.objects.filter(
+            chapter__chapter_id__in=chapters
+        ).distinct()
+        context = {
+            "volumes": volumes,
+            "chapters": chapters,
+            "volume_id": volume_id,
+            "chapter_locs": chapter_locs,
+        }
+        return HttpResponse(template.render(context, request))
+
+
+class QuizView(MentorRequiredMixin, View):
+    def get(self, request, volume_id, chapter_id, quiz_id):
+        volume_id_obj = get_object_or_404(Volume, volume_id=volume_id)
+        chapter_id_obj = get_object_or_404(Chapter, chapter_id=chapter_id)
+        quiz_id_obj = get_object_or_404(Quiz, quiz_id=quiz_id)
+        avg_rating = quiz_id_obj.conceptual_difficulty
+        avg_time = quiz_id_obj.time_required_mins
+        try:
+            reviews = []
+            review_objects = Quiz_Feedback.objects.filter(
+                quiz=quiz_id_obj,
+                date_completed__isnull=True,
+            ).distinct()
+            challenge_ratings = 0
+            time_ratings = 0
+            for review in review_objects:
+                challenge_ratings += review.challenge_rating
+                time_ratings += review.time_rating
+                email = Email.objects.get(user=review.viewer_id, is_primary=True)
+                reviews.append([email, review])
+            avg_rating = challenge_ratings / len(review_objects)
+            avg_time = time_ratings / len(review_objects)
+        except:
+            reviews = []
+        creator = User.objects.get(user_id=quiz_id_obj.creator_id.user_id)
+        creator_email = Email.objects.get(user=creator, is_primary=True)
+        return render(
+            request,
+            "mentapp/quiz.html",
+            {
+                "volume": volume_id_obj,
+                "chapter": chapter_id_obj,
+                "quiz": quiz_id_obj,
+                "reviews": reviews,
+                "creator": creator_email,
+                "avg_rating": int(avg_rating),
+                "avg_time": int(avg_time),
+            },
+        )
+    def post(self, request, volume_id, chapter_id, quiz_id):
+        quiz_id_obj = get_object_or_404(Quiz, quiz_id=quiz_id)
+        if request.POST.get("command") == "viewer_publish":
+            feedback = Quiz_Feedback()
+            feedback.quiz = quiz_id_obj
+            feedback.creator_id = quiz_id_obj.creator_id
+            feedback.viewer_id = request.user
+            feedback.challenge_rating = int(request.POST.get("challenge_rating"))
+            feedback.time_rating = int(request.POST.get("time_rating"))
+            feedback.viewer_comment = request.POST.get("viewer_comment")
+            feedback.save()
+            return JsonResponse({"success": True})
+        elif request.POST.get("command") == "delete":
+            feedback = Quiz_Feedback.objects.get(
+                quiz=quiz_id_obj,
+                feedback_id=request.POST.get("feedback_id"),
+            )
+            feedback.delete()
+            return JsonResponse({"success": True})
+
+
+@method_decorator(AdminRequiredMixin, name='dispatch')
+class PromotionView(View):
+    def get(self, request):
+        return render(
+            request,
+            "mentapp/promotion.html",
+            {
+                "newbies": grab_users(False, False, False, True, True),
+                "mentors": grab_users(True, False, False, True, True),
+                "quiz_makers": grab_users(True, True, False, True, True),
+            },
+        )
+    def post(self, request):
+        email_object = Email.objects.get(
+            email_address=request.POST.get("email"), is_primary=True
+        )
+        user = email_object.user
+        if request.POST.get("command") == "promote":
+            if user.is_active == True:
+                if user.is_quizmaker == True:
+                    user.is_admin = True
+                elif user.is_verified == True:
+                    user.is_quizmaker = True
+                elif user.is_verified == False:
+                    user.is_verified = True
+        user.promotion_requested = False
+        user.save()
+        verification_object = Verification.objects.get(verified=user)
+        verification_object.verifier = request.user
+        verification_object.save()
+        return JsonResponse({"success": True})
+
+class UserEditView(UpdateView):
+    model = User
+    fields = []  # We'll handle fields manually
+    template_name = None  # Not used, redirect only
+    def post(self, request, user_id):
+        user = get_object_or_404(User, user_id=user_id)
+        for key, value in request.POST.items():
+            if key == "primary_email":
+                Email.objects.filter(user=user, is_primary=True).delete()
+
+                emailObject = Email()
+                emailObject.email_address = value
+                emailObject.user = user
+                emailObject.is_primary = True
+                emailObject.is_verified = True
+                emailObject.save()
+            if key == "other_emails":
+                Email.objects.filter(user=user, is_primary=False).delete()
+                insEmails = value.split(",")
+                for em in insEmails:
+                    emailObject = Email()
+                    emailObject.email_address = em
+                    emailObject.user = user
+                    emailObject.save()
+            if hasattr(user, key) and value.strip():
+                setattr(user, key, value)
+        user.save()
+        return redirect(f"/profile/{user.user_id}")

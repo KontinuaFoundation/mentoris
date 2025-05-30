@@ -1,16 +1,9 @@
 from django.urls import path
 
-from . import views
-
-from django.urls import path
-
-
-
-
+from .views import VolumeChapterView, VolumesView
 
 urlpatterns = [
-
-    path("<int:volume_number>/", views.volume_chapter, name="volume_chapter"),
-    path("", views.volumes, name="volumes")
-] 
+    path("<int:volume_number>/", VolumeChapterView.as_view(), name="volume_chapter"),
+    path("", VolumesView.as_view(), name="volumes")
+]
 
