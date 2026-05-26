@@ -22,11 +22,11 @@ Here is our [Technical Specification](https://docs.google.com/document/d/1gqyTfj
     - update the dependencies in requirements.txt (this can be done by running the command `pip freeze > requirements.txt` assuming you are working in a virtual environment with only the minimum packages installed to have Mentoris running, otherwise the dependencies need to be manually added)
     - Use the command `eb deploy` to deploy code into AWS Elastic Beanstalk  when ready
     - The current state of the project after deployment can be viewed here: [ http://mentoris-env.eba-tsm5gnpk.us-west-2.elasticbeanstalk.com/main/]( http://mentoris-env.eba-tsm5gnpk.us-west-2.elasticbeanstalk.com/main/)
-    - Github: [GitHub - TheKontinua/mentoris: The web app for mentors](https://github.com/TheKontinua/mentoris)
+    - GitHub: [GitHub - TheKontinua/mentoris: The web app for mentors](https://github.com/TheKontinua/mentoris)
 5. Complete the official Django tutorial: [Writing your first Django app, part 1 | Django documentation](https://docs.djangoproject.com/en/5.0/intro/tutorial01/)
 6. Meet with the team to get tasks for your first sprint.
 7. You are now ready to start writing code!
-8. Pull from main on: [Kontinua Mentoris Github: GitHub - TheKontinua/mentoris: The web app for mentors](https://github.com/TheKontinua/mentoris)
+8. Pull from main on: [Kontinua Mentoris GitHub: GitHub - TheKontinua/mentoris: The web app for mentors](https://github.com/TheKontinua/mentoris)
 9. Ask the team for the AWS RDS and SES credentials to use in settings.py
 10. Perform tasks using your IDE or text editor of choice
     a. Write clean code with comments as needed
@@ -136,7 +136,7 @@ Things an Admin needs to be able to do:
 
 -   Text area for LaTeX of question
 -   Text area for LaTeX of answer
--   Text area for LaTeX of rubrik
+-   Text area for LaTeX of rubric
 -   conceptual difficulty rating
 -   time required estimate
 -   point_value (should be proportional to time)
@@ -147,7 +147,7 @@ Things an Admin needs to be able to do:
 
 -   Text area for LaTeX of question
 -   Text area for LaTeX of answer
--   Text area for LaTeX of rubrik
+-   Text area for LaTeX of rubric
 
 #### Account page
 
